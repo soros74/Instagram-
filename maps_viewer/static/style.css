@@ -1,0 +1,110 @@
+:root {
+  --primary: #1a73e8;
+  --bg: #f8f9fa;
+}
+
+body {
+  background: var(--bg);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Drop zone */
+.drop-zone {
+  border: 2px dashed #cdd8e3;
+  background: #f0f6ff;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.drop-zone.drag-over {
+  border-color: var(--primary);
+  background: #dce8ff;
+}
+
+/* Stat cards */
+.stat-card {
+  border-radius: 12px;
+  background: #fff;
+}
+.stat-number {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
+}
+.stat-label {
+  font-size: 0.78rem;
+  color: #6c757d;
+  margin-top: 4px;
+}
+
+/* Table */
+#visitsTable thead th {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+#visitsTable tbody tr {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+#visitsTable tbody tr td {
+  vertical-align: middle;
+  font-size: 0.88rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#visitsTable tbody tr td.address-cell {
+  max-width: 220px;
+}
+
+/* Pagination / filter */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Duration badge */
+.dur-badge {
+  background: #e8f0fe;
+  color: #1a73e8;
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Map link */
+.map-btn {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+/* Modal */
+.detail-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+.detail-row .label {
+  color: #6c757d;
+  min-width: 120px;
+  font-size: 0.82rem;
+}
+.detail-row .value {
+  font-weight: 500;
+  word-break: break-word;
+}
+
+/* Map markers */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
