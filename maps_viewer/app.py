@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime, timezone
+from math import radians, sin, cos, sqrt, atan2
 from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__)
@@ -73,39 +74,111 @@ def parse_timeline_json(data):
     return visits
 
 
-def parse_records_json(data):
-    """Parse Records.json (raw location history) — groups nearby points into visits."""
-    visits = []
-    locations = data.get("locations", [])
+def haversine_m(lat1, lng1, lat2, lng2):
+    """Distance in metres between two lat/lng points."""
+    R = 6_371_000
+    p1, p2 = radians(lat1), radians(lat2)
+    dp = radians(lat2 - lat1)
+    dl = radians(lng2 - lng1)
+    a = sin(dp / 2) ** 2 + cos(p1) * cos(p2) * sin(dl / 2) ** 2
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    # Sort by timestamp
-    locations.sort(key=lambda x: x.get("timestampMs", x.get("timestamp", "0")))
 
-    for loc in locations:
-        ts = loc.get("timestamp") or ""
-        if not ts:
-            ts_ms = int(loc.get("timestampMs", 0))
-            dt = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+def detect_stays(points, radius_m=150, min_minutes=5):
+    """
+    Cluster raw GPS points into stays (places where the user stopped).
+    Uses a centroid-expansion approach: O(n), works on millions of records.
+    """
+    stays = []
+    if not points:
+        return stays
+
+    c_lat = points[0]["lat"]
+    c_lng = points[0]["lng"]
+    c_count = 1
+    c_start = 0
+
+    for i in range(1, len(points)):
+        d = haversine_m(c_lat, c_lng, points[i]["lat"], points[i]["lng"])
+        if d <= radius_m:
+            # Expand cluster with running average
+            c_lat = (c_lat * c_count + points[i]["lat"]) / (c_count + 1)
+            c_lng = (c_lng * c_count + points[i]["lng"]) / (c_count + 1)
+            c_count += 1
         else:
+            dur = (points[i - 1]["dt"] - points[c_start]["dt"]).total_seconds() / 60
+            if dur >= min_minutes and c_count >= 2:
+                stays.append({
+                    "lat": round(c_lat, 6),
+                    "lng": round(c_lng, 6),
+                    "start": points[c_start]["dt"],
+                    "end": points[i - 1]["dt"],
+                    "dur_min": int(dur),
+                })
+            c_lat, c_lng = points[i]["lat"], points[i]["lng"]
+            c_count = 1
+            c_start = i
+
+    # Last cluster
+    if c_count >= 2:
+        dur = (points[-1]["dt"] - points[c_start]["dt"]).total_seconds() / 60
+        if dur >= min_minutes:
+            stays.append({
+                "lat": round(c_lat, 6),
+                "lng": round(c_lng, 6),
+                "start": points[c_start]["dt"],
+                "end": points[-1]["dt"],
+                "dur_min": int(dur),
+            })
+    return stays
+
+
+def parse_records_json(data):
+    """
+    Parse Records.json — extracts meaningful stays via stay detection.
+    Returns one entry per detected stop (not one per raw GPS point).
+    """
+    raw = data.get("locations", [])
+
+    # Build normalised list sorted by time
+    points = []
+    for loc in raw:
+        ts = loc.get("timestamp") or ""
+        if ts:
             dt = parse_timestamp(ts)
+        else:
+            ts_ms = loc.get("timestampMs")
+            if not ts_ms:
+                continue
+            dt = datetime.fromtimestamp(int(ts_ms) / 1000, tz=timezone.utc)
         if not dt:
             continue
-
         lat = loc.get("latitudeE7", 0) / 1e7
         lng = loc.get("longitudeE7", 0) / 1e7
-        local_dt = dt.astimezone()
+        if lat == 0 and lng == 0:
+            continue
+        points.append({"lat": lat, "lng": lng, "dt": dt})
 
+    points.sort(key=lambda p: p["dt"])
+
+    stays = detect_stays(points)
+
+    visits = []
+    for s in stays:
+        local_start = s["start"].astimezone()
+        h, m = divmod(s["dur_min"], 60)
+        dur_str = f"{h}h {m}m" if h else f"{m}m"
         visits.append({
-            "name": "Posizione GPS",
-            "address": f"{round(lat,5)}, {round(lng,5)}",
-            "date": local_dt.strftime("%d/%m/%Y"),
-            "time": local_dt.strftime("%H:%M"),
-            "date_sort": local_dt.strftime("%Y%m%d%H%M"),
-            "duration": "—",
-            "duration_minutes": 0,
-            "lat": round(lat, 6),
-            "lng": round(lng, 6),
-            "confidence": loc.get("accuracy", 0),
+            "name": f"Sosta GPS ({s['lat']:.4f}, {s['lng']:.4f})",
+            "address": f"{s['lat']:.5f}, {s['lng']:.5f}",
+            "date": local_start.strftime("%d/%m/%Y"),
+            "time": local_start.strftime("%H:%M"),
+            "date_sort": local_start.strftime("%Y%m%d%H%M"),
+            "duration": dur_str,
+            "duration_minutes": s["dur_min"],
+            "lat": s["lat"],
+            "lng": s["lng"],
+            "confidence": 0,
         })
 
     return visits

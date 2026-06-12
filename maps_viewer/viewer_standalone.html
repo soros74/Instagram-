@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Google Maps — Luoghi Visitati</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  body { background:#f8f9fa; font-family:'Segoe UI',system-ui,sans-serif; }
+  .drop-zone { border:2px dashed #cdd8e3; background:#f0f6ff; cursor:pointer; transition:.2s; border-radius:12px; padding:40px; text-align:center; }
+  .drop-zone.over { border-color:#1a73e8; background:#dce8ff; }
+  .stat-card { border-radius:12px; }
+  .stat-number { font-size:1.8rem; font-weight:700; color:#1a73e8; line-height:1; }
+  .stat-label { font-size:.78rem; color:#6c757d; margin-top:4px; }
+  #visitsTable tbody tr { cursor:pointer; }
+  #visitsTable td { font-size:.88rem; vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+  .dur-badge { background:#e8f0fe; color:#1a73e8; border-radius:20px; padding:2px 10px; font-size:.8rem; font-weight:600; }
+  .map-btn { font-size:.8rem; padding:2px 8px; border-radius:20px; }
+  #map { height:calc(100vh - 64px); }
+  .detail-row { display:flex; gap:10px; margin-bottom:8px; font-size:.9rem; }
+  .detail-row .lbl { color:#6c757d; min-width:110px; font-size:.82rem; }
+  .detail-row .val { font-weight:500; word-break:break-word; }
+  .progress-wrap { margin-top:12px; display:none; }
+  .addr-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .page-btn { min-width:36px; }
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar navbar-dark bg-primary px-4 py-3 shadow-sm">
+  <span class="navbar-brand fw-bold"><i class="bi bi-geo-alt-fill me-2"></i>Google Maps — Luoghi Visitati</span>
+  <div class="d-flex gap-2" id="viewBtns" style="display:none!important">
+    <button id="btnTable" class="btn btn-light btn-sm"><i class="bi bi-table me-1"></i>Tabella</button>
+    <button id="btnMap"   class="btn btn-outline-light btn-sm"><i class="bi bi-map me-1"></i>Mappa</button>
+  </div>
+</nav>
+
+<!-- UPLOAD -->
+<div class="container py-4" id="uploadSection">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <h5 class="mb-1">Carica il tuo <code>Records.json</code></h5>
+          <p class="text-muted small mb-3">
+            Da <strong>Google Takeout</strong> → Mappe → Cronologia posizioni.<br/>
+            Funziona anche con i file mensili <code>YYYY_MESE.json</code> (Semantic Location History).
+          </p>
+          <div class="drop-zone" id="dropZone">
+            <i class="bi bi-cloud-upload fs-1 text-primary mb-2 d-block"></i>
+            <p class="mb-2 fw-semibold">Trascina il file JSON qui</p>
+            <small class="text-muted">oppure</small><br/><br/>
+            <label class="btn btn-primary btn-sm">
+              <i class="bi bi-folder2-open me-1"></i>Scegli file
+              <input type="file" id="fileInput" accept=".json" multiple hidden/>
+            </label>
+          </div>
+          <div id="fileNames" class="small text-muted mt-2"></div>
+          <div class="progress-wrap" id="progressWrap">
+            <div class="d-flex justify-content-between small text-muted mb-1">
+              <span id="progressLabel">Elaborazione…</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div class="progress" style="height:6px">
+              <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%"></div>
+            </div>
+          </div>
+          <div id="errBox" class="alert alert-warning d-none mt-3 py-2 small"></div>
+        </div>
+      </div>
+      <p class="text-muted small text-center mt-3">
+        <i class="bi bi-shield-lock me-1"></i>I dati vengono elaborati interamente nel browser. Nessun file viene inviato a server esterni.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div id="statsBar" class="container-fluid px-4 py-3 d-none">
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3"><div class="stat-card card border-0 shadow-sm text-center p-3">
+      <div class="stat-number" id="sTotal">0</div><div class="stat-label">Soste rilevate</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="stat-card card border-0 shadow-sm text-center p-3">
+      <div class="stat-number" id="sDays">0</div><div class="stat-label">Giorni con dati</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="stat-card card border-0 shadow-sm text-center p-3">
+      <div class="stat-number" id="sLongest">—</div><div class="stat-label">Sosta più lunga</div>
+    </div></div>
+    <div class="col-6 col-md-3"><div class="stat-card card border-0 shadow-sm text-center p-3">
+      <div class="stat-number" id="sAvg">—</div><div class="stat-label">Durata media</div>
+    </div></div>
+  </div>
+</div>
+
+<!-- TABLE SECTION -->
+<div id="tableSection" class="container-fluid px-4 d-none">
+  <div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="row g-2 align-items-center">
+        <div class="col-md-4">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input id="searchInput" class="form-control" placeholder="Cerca luogo o coordinate…"/>
+          </div>
+        </div>
+        <div class="col-md-2"><input type="date" id="dateFrom" class="form-control form-control-sm" title="Da"/></div>
+        <div class="col-md-2"><input type="date" id="dateTo"   class="form-control form-control-sm" title="A"/></div>
+        <div class="col-md-2">
+          <select id="minDur" class="form-select form-select-sm">
+            <option value="0">Tutte le soste</option>
+            <option value="15">≥ 15 min</option>
+            <option value="30" selected>≥ 30 min</option>
+            <option value="60">≥ 1 ora</option>
+            <option value="120">≥ 2 ore</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button id="btnReset" class="btn btn-outline-secondary btn-sm w-100">
+            <i class="bi bi-x-circle me-1"></i>Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover table-striped mb-0" id="visitsTable">
+          <thead class="table-primary">
+            <tr>
+              <th>#</th>
+              <th><i class="bi bi-building me-1"></i>Luogo / Coordinate</th>
+              <th><i class="bi bi-calendar3 me-1"></i>Data</th>
+              <th><i class="bi bi-clock me-1"></i>Ora</th>
+              <th><i class="bi bi-hourglass-split me-1"></i>Permanenza</th>
+              <th><i class="bi bi-signpost-2 me-1"></i>Indirizzo</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="d-flex align-items-center justify-content-between my-3" id="pageBar">
+    <div class="small text-muted" id="tableInfo"></div>
+    <div class="d-flex gap-1" id="pageBtns"></div>
+  </div>
+</div>
+
+<!-- MAP SECTION -->
+<div id="mapSection" class="d-none"><div id="map"></div></div>
+
+<!-- DETAIL MODAL -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title" id="modalTitle">Dettaglio sosta</h5>
+        <button class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer gap-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Chiudi</button>
+        <button class="btn btn-sm btn-outline-info" id="btnGeocode">
+          <i class="bi bi-signpost-2 me-1"></i>Cerca indirizzo
+        </button>
+        <a id="modalMapLink" class="btn btn-sm btn-primary" target="_blank">
+          <i class="bi bi-map me-1"></i>Google Maps
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+const RADIUS_M    = 150;   // cluster radius for stay detection
+const MIN_MINUTES = 5;     // minimum stay to count
+const PAGE_SIZE   = 50;
+
+// ── State ────────────────────────────────────────────────────────────────────
+let allVisits      = [];
+let filteredVisits = [];
+let currentPage    = 1;
+let map            = null;
+let mapMarkers     = [];
+let currentDetail  = null;
+const bsModal      = new bootstrap.Modal(document.getElementById('detailModal'));
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+const dropZone      = document.getElementById('dropZone');
+const fileInput     = document.getElementById('fileInput');
+const progressWrap  = document.getElementById('progressWrap');
+const progressBar   = document.getElementById('progressBar');
+const progressLabel = document.getElementById('progressLabel');
+const progressPct   = document.getElementById('progressPct');
+const errBox        = document.getElementById('errBox');
+const statsBar      = document.getElementById('statsBar');
+const tableSection  = document.getElementById('tableSection');
+const mapSection    = document.getElementById('mapSection');
+const viewBtns      = document.getElementById('viewBtns');
+const tableBody     = document.getElementById('tableBody');
+const tableInfo     = document.getElementById('tableInfo');
+const pageBtns      = document.getElementById('pageBtns');
+const searchInput   = document.getElementById('searchInput');
+const dateFrom      = document.getElementById('dateFrom');
+const dateTo        = document.getElementById('dateTo');
+const minDur        = document.getElementById('minDur');
+
+// ── Drag & drop ──────────────────────────────────────────────────────────────
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+function handleFiles(files) {
+  if (!files.length) return;
+  document.getElementById('fileNames').innerHTML =
+    Array.from(files).map(f => `<span class="badge bg-secondary me-1">${f.name}</span>`).join('');
+  processFiles(Array.from(files));
+}
+
+// ── File processing ──────────────────────────────────────────────────────────
+async function processFiles(files) {
+  progressWrap.style.display = 'block';
+  errBox.classList.add('d-none');
+  const warnings = [];
+  allVisits = [];
+
+  for (let fi = 0; fi < files.length; fi++) {
+    const f = files[fi];
+    progressLabel.textContent = `Lettura ${f.name}…`;
+    setProgress((fi / files.length) * 30);
+
+    let data;
+    try {
+      data = await readJSON(f);
+    } catch (e) {
+      warnings.push(`${f.name}: JSON non valido`);
+      continue;
+    }
+
+    progressLabel.textContent = `Analisi ${f.name}…`;
+
+    let visits;
+    if (data.timelineObjects) {
+      visits = parseTimeline(data);
+    } else if (data.locations) {
+      visits = await parseRecords(data, fi, files.length);
+    } else {
+      warnings.push(`${f.name}: formato non riconosciuto`);
+      continue;
+    }
+    allVisits.push(...visits);
+  }
+
+  allVisits.sort((a, b) => b.dateSort.localeCompare(a.dateSort));
+  filteredVisits = [...allVisits];
+  currentPage = 1;
+
+  setProgress(100);
+  progressWrap.style.display = 'none';
+
+  if (warnings.length) {
+    errBox.innerHTML = '<strong>Avvisi:</strong><br>' + warnings.join('<br>');
+    errBox.classList.remove('d-none');
+  }
+
+  if (!allVisits.length) {
+    errBox.innerHTML = (errBox.innerHTML || '') + '<br>Nessuna sosta rilevata. Prova ad abbassare la durata minima.';
+    errBox.classList.remove('d-none');
+    return;
+  }
+
+  renderStats();
+  renderTable();
+  document.getElementById('uploadSection').classList.add('d-none');
+  statsBar.classList.remove('d-none');
+  tableSection.classList.remove('d-none');
+  viewBtns.style.display = 'flex';
+}
+
+function readJSON(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try { resolve(JSON.parse(e.target.result)); }
+      catch (err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+}
+
+function setProgress(pct) {
+  progressBar.style.width = pct + '%';
+  progressPct.textContent = Math.round(pct) + '%';
+}
+
+// ── Parsers ──────────────────────────────────────────────────────────────────
+function parseTimeline(data) {
+  const visits = [];
+  for (const obj of (data.timelineObjects || [])) {
+    const pv = obj.placeVisit;
+    if (!pv) continue;
+    const loc = pv.location || {};
+    const dur = pv.duration || {};
+    const startDt = parseTs(dur.startTimestamp);
+    const endDt   = parseTs(dur.endTimestamp);
+    if (!startDt) continue;
+    const lat = (loc.latitudeE7  || 0) / 1e7;
+    const lng = (loc.longitudeE7 || 0) / 1e7;
+    visits.push(makeVisit({
+      name:    loc.name || 'Luogo sconosciuto',
+      address: loc.address || '',
+      startDt, endDt, lat, lng,
+      confidence: pv.visitConfidence || 0,
+    }));
+  }
+  return visits;
+}
+
+async function parseRecords(data, fileIdx, totalFiles) {
+  const raw = data.locations || [];
+  progressLabel.textContent = `Normalizzazione ${raw.length.toLocaleString('it')} punti GPS…`;
+
+  // Normalise in chunks to keep UI responsive
+  const points = [];
+  const CHUNK = 50_000;
+  for (let i = 0; i < raw.length; i += CHUNK) {
+    const slice = raw.slice(i, i + CHUNK);
+    for (const loc of slice) {
+      const dt = locToDate(loc);
+      if (!dt) continue;
+      const lat = (loc.latitudeE7  || 0) / 1e7;
+      const lng = (loc.longitudeE7 || 0) / 1e7;
+      if (!lat && !lng) continue;
+      points.push({ lat, lng, dt });
+    }
+    setProgress(30 + ((i / raw.length) * 30));
+    await tick();
+  }
+
+  points.sort((a, b) => a.dt - b.dt);
+  progressLabel.textContent = `Rilevamento soste su ${points.length.toLocaleString('it')} punti…`;
+  await tick();
+
+  const stays = await stayDetection(points);
+  progressLabel.textContent = `Trovate ${stays.length} soste.`;
+  setProgress(90 + ((fileIdx / totalFiles) * 10));
+
+  return stays.map(s => makeVisit({
+    name:    `Sosta (${s.lat.toFixed(4)}, ${s.lng.toFixed(4)})`,
+    address: `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}`,
+    startDt: s.start,
+    endDt:   s.end,
+    lat:     s.lat,
+    lng:     s.lng,
+    confidence: 0,
+  }));
+}
+
+function tick() { return new Promise(r => setTimeout(r, 0)); }
+
+function locToDate(loc) {
+  if (loc.timestamp) return parseTs(loc.timestamp);
+  if (loc.timestampMs) return new Date(+loc.timestampMs);
+  return null;
+}
+
+function parseTs(ts) {
+  if (!ts) return null;
+  try { return new Date(ts); } catch { return null; }
+}
+
+// ── Stay detection (client-side, O(n)) ───────────────────────────────────────
+async function stayDetection(points) {
+  const stays = [];
+  if (!points.length) return stays;
+
+  const CHUNK = 100_000;
+  let cLat = points[0].lat, cLng = points[0].lng, cCnt = 1, cStart = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    if (i % CHUNK === 0) { await tick(); setProgress(60 + (i / points.length) * 25); }
+    const d = haversine(cLat, cLng, points[i].lat, points[i].lng);
+    if (d <= RADIUS_M) {
+      cLat = (cLat * cCnt + points[i].lat) / (cCnt + 1);
+      cLng = (cLng * cCnt + points[i].lng) / (cCnt + 1);
+      cCnt++;
+    } else {
+      const durMin = (points[i-1].dt - points[cStart].dt) / 60_000;
+      if (durMin >= MIN_MINUTES && cCnt >= 2) {
+        stays.push({ lat: +cLat.toFixed(6), lng: +cLng.toFixed(6), start: points[cStart].dt, end: points[i-1].dt, durMin: Math.round(durMin) });
+      }
+      cLat = points[i].lat; cLng = points[i].lng; cCnt = 1; cStart = i;
+    }
+  }
+  if (cCnt >= 2) {
+    const durMin = (points[points.length-1].dt - points[cStart].dt) / 60_000;
+    if (durMin >= MIN_MINUTES)
+      stays.push({ lat: +cLat.toFixed(6), lng: +cLng.toFixed(6), start: points[cStart].dt, end: points[points.length-1].dt, durMin: Math.round(durMin) });
+  }
+  return stays;
+}
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6_371_000;
+  const p = Math.PI / 180;
+  const dp = (lat2 - lat1) * p, dl = (lng2 - lng1) * p;
+  const a = Math.sin(dp/2)**2 + Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dl/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// ── Visit factory ─────────────────────────────────────────────────────────────
+function makeVisit({ name, address, startDt, endDt, lat, lng, confidence }) {
+  const d = new Date(startDt);
+  const date = d.toLocaleDateString('it-IT');
+  const time = d.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
+  const [dd, mm, yyyy] = date.split('/');
+  const dateSort = `${yyyy}${mm}${dd}${time.replace(':','')}`;
+
+  let durMin = 0, durStr = '—';
+  if (endDt) {
+    durMin = Math.round((new Date(endDt) - d) / 60_000);
+    const h = Math.floor(durMin / 60), m = durMin % 60;
+    durStr = h ? `${h}h ${m}m` : `${m}m`;
+  }
+
+  return { name, address, date, time, dateSort, duration: durStr, durationMin: durMin, lat: +lat.toFixed(6), lng: +lng.toFixed(6), confidence };
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function renderStats() {
+  document.getElementById('sTotal').textContent = allVisits.length.toLocaleString('it');
+  document.getElementById('sDays').textContent  = new Set(allVisits.map(v => v.date)).size.toLocaleString('it');
+  const withDur = allVisits.filter(v => v.durationMin > 0);
+  if (withDur.length) {
+    const mx = withDur.reduce((a,b) => b.durationMin > a.durationMin ? b : a);
+    document.getElementById('sLongest').textContent = mx.duration;
+    const avg = Math.round(withDur.reduce((s,v) => s + v.durationMin, 0) / withDur.length);
+    document.getElementById('sAvg').textContent = fmtMin(avg);
+  }
+}
+
+function fmtMin(m) { const h=Math.floor(m/60),mm=m%60; return h?`${h}h ${mm}m`:`${mm}m`; }
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const page  = filteredVisits.slice(start, start + PAGE_SIZE);
+  tableBody.innerHTML = page.map((v, i) => {
+    const idx = allVisits.indexOf(v);
+    return `<tr onclick="showDetail(${idx})">
+      <td class="text-muted">${start+i+1}</td>
+      <td title="${esc(v.name)}"><strong>${esc(v.name)}</strong></td>
+      <td>${v.date}</td>
+      <td>${v.time}</td>
+      <td>${v.durationMin ? `<span class="dur-badge">${v.duration}</span>` : '—'}</td>
+      <td class="addr-cell text-muted" title="${esc(v.address)}" id="addr-${idx}">${esc(v.address)}</td>
+      <td>
+        <a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank"
+           class="btn btn-outline-primary btn-sm map-btn" onclick="event.stopPropagation()">
+          <i class="bi bi-pin-map"></i>
+        </a>
+      </td>
+    </tr>`;
+  }).join('');
+  renderPagination();
+  tableInfo.textContent = `${Math.min(start+PAGE_SIZE, filteredVisits.length).toLocaleString('it')} di ${filteredVisits.length.toLocaleString('it')} soste`;
+}
+
+function renderPagination() {
+  const total = Math.ceil(filteredVisits.length / PAGE_SIZE);
+  pageBtns.innerHTML = '';
+  if (total <= 1) return;
+
+  const addBtn = (label, page, disabled, active) => {
+    const b = document.createElement('button');
+    b.className = `btn btn-sm page-btn ${active ? 'btn-primary' : 'btn-outline-secondary'}`;
+    b.innerHTML = label; b.disabled = disabled;
+    b.onclick = () => { currentPage = page; renderTable(); window.scrollTo(0,0); };
+    pageBtns.appendChild(b);
+  };
+  addBtn('<i class="bi bi-chevron-double-left"></i>', 1, currentPage===1, false);
+  addBtn('<i class="bi bi-chevron-left"></i>', currentPage-1, currentPage===1, false);
+  for (let p = Math.max(1,currentPage-2); p <= Math.min(total,currentPage+2); p++)
+    addBtn(p, p, false, p===currentPage);
+  addBtn('<i class="bi bi-chevron-right"></i>', currentPage+1, currentPage===total, false);
+  addBtn('<i class="bi bi-chevron-double-right"></i>', total, currentPage===total, false);
+}
+
+// ── Filters ──────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q    = searchInput.value.trim().toLowerCase();
+  const from = dateFrom.value;
+  const to   = dateTo.value;
+  const minM = +minDur.value;
+
+  filteredVisits = allVisits.filter(v => {
+    if (q && !v.name.toLowerCase().includes(q) && !v.address.toLowerCase().includes(q)) return false;
+    if (minM && v.durationMin < minM) return false;
+    if (from || to) {
+      const [d,m,y] = v.date.split('/');
+      const iso = `${y}-${m}-${d}`;
+      if (from && iso < from) return false;
+      if (to   && iso > to)   return false;
+    }
+    return true;
+  });
+  currentPage = 1;
+  renderTable();
+  if (map) { clearMapMarkers(); loadMapMarkers(); }
+}
+
+[searchInput, dateFrom, dateTo, minDur].forEach(el => el.addEventListener('change', applyFilters));
+searchInput.addEventListener('input', applyFilters);
+document.getElementById('btnReset').addEventListener('click', () => {
+  searchInput.value = ''; dateFrom.value = ''; dateTo.value = ''; minDur.value = '30';
+  filteredVisits = [...allVisits]; currentPage = 1; renderTable();
+  if (map) { clearMapMarkers(); loadMapMarkers(); }
+});
+
+// ── Detail modal ──────────────────────────────────────────────────────────────
+window.showDetail = function(idx) {
+  const v = allVisits[idx];
+  currentDetail = { idx, v };
+  document.getElementById('modalTitle').textContent = v.name;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-row"><span class="lbl"><i class="bi bi-calendar3 me-1"></i>Data</span><span class="val">${v.date}</span></div>
+    <div class="detail-row"><span class="lbl"><i class="bi bi-clock me-1"></i>Orario</span><span class="val">${v.time}</span></div>
+    <div class="detail-row"><span class="lbl"><i class="bi bi-hourglass me-1"></i>Permanenza</span><span class="val">${v.duration}</span></div>
+    <div class="detail-row"><span class="lbl"><i class="bi bi-crosshair me-1"></i>Coordinate</span><span class="val">${v.lat}, ${v.lng}</span></div>
+    <div class="detail-row"><span class="lbl"><i class="bi bi-geo me-1"></i>Indirizzo</span><span class="val" id="modalAddr">${v.address || '—'}</span></div>
+    ${v.confidence ? `<div class="detail-row"><span class="lbl"><i class="bi bi-patch-check me-1"></i>Confidenza</span><span class="val">${Math.round(v.confidence)}%</span></div>` : ''}
+  `;
+  document.getElementById('modalMapLink').href = `https://maps.google.com/?q=${v.lat},${v.lng}`;
+  bsModal.show();
+};
+
+// Reverse geocoding via Nominatim (free, 1 req/s limit)
+document.getElementById('btnGeocode').addEventListener('click', async () => {
+  if (!currentDetail) return;
+  const { idx, v } = currentDetail;
+  const btn = document.getElementById('btnGeocode');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cercando…';
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${v.lat}&lon=${v.lng}&format=json`, {
+      headers: { 'Accept-Language': 'it' }
+    });
+    const d = await r.json();
+    const addr = d.display_name || '—';
+    allVisits[idx].address = addr;
+    document.getElementById('modalAddr').textContent = addr;
+    const cell = document.getElementById(`addr-${idx}`);
+    if (cell) { cell.textContent = addr; cell.title = addr; }
+  } catch {
+    document.getElementById('modalAddr').textContent = 'Errore nella ricerca';
+  } finally {
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-signpost-2 me-1"></i>Cerca indirizzo';
+  }
+});
+
+// ── Map view ──────────────────────────────────────────────────────────────────
+document.getElementById('btnTable').addEventListener('click', () => {
+  tableSection.classList.remove('d-none'); mapSection.classList.add('d-none');
+  document.getElementById('btnTable').className = 'btn btn-light btn-sm';
+  document.getElementById('btnMap').className   = 'btn btn-outline-light btn-sm';
+});
+
+document.getElementById('btnMap').addEventListener('click', () => {
+  mapSection.classList.remove('d-none'); tableSection.classList.add('d-none');
+  document.getElementById('btnMap').className   = 'btn btn-light btn-sm';
+  document.getElementById('btnTable').className = 'btn btn-outline-light btn-sm';
+  initMap();
+});
+
+function initMap() {
+  if (!map) {
+    map = L.map('map').setView([41.9, 12.5], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
+  }
+  clearMapMarkers(); loadMapMarkers();
+}
+
+function clearMapMarkers() { mapMarkers.forEach(m => m.remove()); mapMarkers = []; }
+
+function loadMapMarkers() {
+  const pts = filteredVisits.filter(v => v.lat || v.lng);
+  const bounds = [];
+  pts.forEach((v, i) => {
+    const m = L.circleMarker([v.lat, v.lng], { radius:7, fillColor:'#1a73e8', color:'#fff', weight:2, fillOpacity:.85 }).addTo(map);
+    m.bindPopup(`<strong>${esc(v.name)}</strong><br/><small>${v.date} ${v.time} — ${v.duration}</small>`);
+    mapMarkers.push(m);
+    bounds.push([v.lat, v.lng]);
+  });
+  if (bounds.length) map.fitBounds(bounds, { padding:[40,40] });
+}
+
+// ── Util ──────────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
