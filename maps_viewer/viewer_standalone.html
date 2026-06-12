@@ -13,18 +13,26 @@
   .drop-zone.over { border-color:#1a73e8; background:#dce8ff; }
   .stat-card { border-radius:12px; }
   .stat-number { font-size:1.8rem; font-weight:700; color:#1a73e8; line-height:1; }
-  .stat-label { font-size:.78rem; color:#6c757d; margin-top:4px; }
+  .stat-label  { font-size:.78rem; color:#6c757d; margin-top:4px; }
   #visitsTable tbody tr { cursor:pointer; }
   #visitsTable td { font-size:.88rem; vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; }
   .dur-badge { background:#e8f0fe; color:#1a73e8; border-radius:20px; padding:2px 10px; font-size:.8rem; font-weight:600; }
-  .map-btn { font-size:.8rem; padding:2px 8px; border-radius:20px; }
+  .map-btn   { font-size:.8rem; padding:2px 8px; border-radius:20px; }
   #map { height:calc(100vh - 64px); }
   .detail-row { display:flex; gap:10px; margin-bottom:8px; font-size:.9rem; }
   .detail-row .lbl { color:#6c757d; min-width:110px; font-size:.82rem; }
   .detail-row .val { font-weight:500; word-break:break-word; }
   .progress-wrap { margin-top:12px; display:none; }
   .addr-cell { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .page-btn { min-width:36px; }
+  .page-btn  { min-width:36px; }
+
+  /* Date filter panel */
+  .shortcut-btn { font-size:.78rem; padding:2px 9px; border-radius:20px; white-space:nowrap; }
+  .shortcut-btn.active { background:#1a73e8 !important; color:#fff !important; border-color:#1a73e8 !important; }
+  .filter-label { font-size:.8rem; color:#6c757d; font-weight:600; letter-spacing:.02em; margin-bottom:4px; }
+  .date-range-badge { background:#fff3cd; border:1px solid #ffc107; border-radius:20px; padding:2px 10px; font-size:.8rem; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .month-nav select { font-size:.85rem; }
+  #filterPanel { border-left:4px solid #1a73e8; }
 </style>
 </head>
 <body>
@@ -72,7 +80,7 @@
         </div>
       </div>
       <p class="text-muted small text-center mt-3">
-        <i class="bi bi-shield-lock me-1"></i>I dati vengono elaborati interamente nel browser. Nessun file viene inviato a server esterni.
+        <i class="bi bi-shield-lock me-1"></i>I dati vengono elaborati interamente nel browser. Nessun dato viene inviato a server esterni.
       </p>
     </div>
   </div>
@@ -98,18 +106,20 @@
 
 <!-- TABLE SECTION -->
 <div id="tableSection" class="container-fluid px-4 d-none">
-  <div class="card border-0 shadow-sm mb-3">
-    <div class="card-body py-2 px-3">
-      <div class="row g-2 align-items-center">
-        <div class="col-md-4">
+
+  <!-- ── FILTER PANEL ── -->
+  <div class="card border-0 shadow-sm mb-3" id="filterPanel">
+    <div class="card-body py-3 px-4">
+
+      <!-- Row 1: text + duration + reset -->
+      <div class="row g-2 align-items-center mb-3">
+        <div class="col-md-5">
           <div class="input-group input-group-sm">
-            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <span class="input-group-text bg-white"><i class="bi bi-search text-primary"></i></span>
             <input id="searchInput" class="form-control" placeholder="Cerca luogo o coordinate…"/>
           </div>
         </div>
-        <div class="col-md-2"><input type="date" id="dateFrom" class="form-control form-control-sm" title="Da"/></div>
-        <div class="col-md-2"><input type="date" id="dateTo"   class="form-control form-control-sm" title="A"/></div>
-        <div class="col-md-2">
+        <div class="col-md-3">
           <select id="minDur" class="form-select form-select-sm">
             <option value="0">Tutte le soste</option>
             <option value="15">≥ 15 min</option>
@@ -118,14 +128,60 @@
             <option value="120">≥ 2 ore</option>
           </select>
         </div>
-        <div class="col-md-2">
-          <button id="btnReset" class="btn btn-outline-secondary btn-sm w-100">
+        <div class="col-md-4 text-end">
+          <span id="activeRangeBadge" class="date-range-badge me-2 d-none"></span>
+          <button id="btnReset" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-x-circle me-1"></i>Reset
           </button>
         </div>
       </div>
+
+      <!-- Row 2: shortcut buttons -->
+      <div class="mb-3">
+        <div class="filter-label"><i class="bi bi-lightning-charge me-1"></i>Periodo rapido</div>
+        <div class="d-flex flex-wrap gap-1" id="shortcutBtns">
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="today">Oggi</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="yesterday">Ieri</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="week">Questa settimana</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="month">Questo mese</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="3m">Ultimi 3 mesi</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="6m">Ultimi 6 mesi</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="year">Quest'anno</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn" data-range="lastyear">Anno scorso</button>
+          <button class="btn btn-sm btn-outline-primary shortcut-btn active" data-range="all">Tutto</button>
+        </div>
+      </div>
+
+      <!-- Row 3: month navigator + exact range -->
+      <div class="row g-2 align-items-end">
+        <div class="col-auto">
+          <div class="filter-label"><i class="bi bi-calendar-month me-1"></i>Naviga per mese</div>
+          <div class="d-flex align-items-center gap-1 month-nav">
+            <button class="btn btn-sm btn-outline-secondary" id="btnMonthPrev" title="Mese precedente">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <select id="monthSelect" class="form-select form-select-sm" style="width:auto;min-width:170px"></select>
+            <button class="btn btn-sm btn-outline-secondary" id="btnMonthNext" title="Mese successivo">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        </div>
+        <div class="col-auto">
+          <div class="filter-label"><i class="bi bi-calendar-range me-1"></i>Intervallo preciso</div>
+          <div class="d-flex align-items-center gap-2">
+            <input type="date" id="dateFrom" class="form-control form-control-sm" style="width:145px" placeholder="Da"/>
+            <span class="text-muted">→</span>
+            <input type="date" id="dateTo"   class="form-control form-control-sm" style="width:145px" placeholder="A"/>
+            <button id="btnApplyRange" class="btn btn-primary btn-sm">
+              <i class="bi bi-funnel me-1"></i>Applica
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
+  <!-- ── END FILTER PANEL ── -->
 
   <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
@@ -184,9 +240,12 @@
 'use strict';
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const RADIUS_M    = 150;   // cluster radius for stay detection
-const MIN_MINUTES = 5;     // minimum stay to count
+const RADIUS_M    = 150;
+const MIN_MINUTES = 5;
 const PAGE_SIZE   = 50;
+
+const MESI_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                 'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
 // ── State ────────────────────────────────────────────────────────────────────
 let allVisits      = [];
@@ -195,29 +254,33 @@ let currentPage    = 1;
 let map            = null;
 let mapMarkers     = [];
 let currentDetail  = null;
-const bsModal      = new bootstrap.Modal(document.getElementById('detailModal'));
+let monthList      = [];   // [{value:'YYYY-MM', label:'Mese YYYY', count:N}]
+let currentMonthIdx = -1;
+const bsModal = new bootstrap.Modal(document.getElementById('detailModal'));
 
-// ── DOM ──────────────────────────────────────────────────────────────────────
-const dropZone      = document.getElementById('dropZone');
-const fileInput     = document.getElementById('fileInput');
-const progressWrap  = document.getElementById('progressWrap');
-const progressBar   = document.getElementById('progressBar');
-const progressLabel = document.getElementById('progressLabel');
-const progressPct   = document.getElementById('progressPct');
-const errBox        = document.getElementById('errBox');
-const statsBar      = document.getElementById('statsBar');
-const tableSection  = document.getElementById('tableSection');
-const mapSection    = document.getElementById('mapSection');
-const viewBtns      = document.getElementById('viewBtns');
-const tableBody     = document.getElementById('tableBody');
-const tableInfo     = document.getElementById('tableInfo');
-const pageBtns      = document.getElementById('pageBtns');
-const searchInput   = document.getElementById('searchInput');
-const dateFrom      = document.getElementById('dateFrom');
-const dateTo        = document.getElementById('dateTo');
-const minDur        = document.getElementById('minDur');
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const dropZone       = document.getElementById('dropZone');
+const fileInput      = document.getElementById('fileInput');
+const progressWrap   = document.getElementById('progressWrap');
+const progressBar    = document.getElementById('progressBar');
+const progressLabel  = document.getElementById('progressLabel');
+const progressPct    = document.getElementById('progressPct');
+const errBox         = document.getElementById('errBox');
+const statsBar       = document.getElementById('statsBar');
+const tableSection   = document.getElementById('tableSection');
+const mapSection     = document.getElementById('mapSection');
+const viewBtns       = document.getElementById('viewBtns');
+const tableBody      = document.getElementById('tableBody');
+const tableInfo      = document.getElementById('tableInfo');
+const pageBtns       = document.getElementById('pageBtns');
+const searchInput    = document.getElementById('searchInput');
+const dateFrom       = document.getElementById('dateFrom');
+const dateTo         = document.getElementById('dateTo');
+const minDur         = document.getElementById('minDur');
+const monthSelect    = document.getElementById('monthSelect');
+const activeRangeBadge = document.getElementById('activeRangeBadge');
 
-// ── Drag & drop ──────────────────────────────────────────────────────────────
+// ── Drag & drop ───────────────────────────────────────────────────────────────
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('over'));
 dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('over'); handleFiles(e.dataTransfer.files); });
@@ -230,7 +293,7 @@ function handleFiles(files) {
   processFiles(Array.from(files));
 }
 
-// ── File processing ──────────────────────────────────────────────────────────
+// ── File processing ───────────────────────────────────────────────────────────
 async function processFiles(files) {
   progressWrap.style.display = 'block';
   errBox.classList.add('d-none');
@@ -243,23 +306,17 @@ async function processFiles(files) {
     setProgress((fi / files.length) * 30);
 
     let data;
-    try {
-      data = await readJSON(f);
-    } catch (e) {
-      warnings.push(`${f.name}: JSON non valido`);
-      continue;
-    }
+    try { data = await readJSON(f); }
+    catch { warnings.push(`${f.name}: JSON non valido`); continue; }
 
     progressLabel.textContent = `Analisi ${f.name}…`;
-
     let visits;
     if (data.timelineObjects) {
       visits = parseTimeline(data);
     } else if (data.locations) {
       visits = await parseRecords(data, fi, files.length);
     } else {
-      warnings.push(`${f.name}: formato non riconosciuto`);
-      continue;
+      warnings.push(`${f.name}: formato non riconosciuto`); continue;
     }
     allVisits.push(...visits);
   }
@@ -275,13 +332,13 @@ async function processFiles(files) {
     errBox.innerHTML = '<strong>Avvisi:</strong><br>' + warnings.join('<br>');
     errBox.classList.remove('d-none');
   }
-
   if (!allVisits.length) {
-    errBox.innerHTML = (errBox.innerHTML || '') + '<br>Nessuna sosta rilevata. Prova ad abbassare la durata minima.';
+    errBox.innerHTML = (errBox.innerHTML || '') + '<br>Nessuna sosta rilevata.';
     errBox.classList.remove('d-none');
     return;
   }
 
+  populateMonthNav();
   renderStats();
   renderTable();
   document.getElementById('uploadSection').classList.add('d-none');
@@ -291,14 +348,11 @@ async function processFiles(files) {
 }
 
 function readJSON(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      try { resolve(JSON.parse(e.target.result)); }
-      catch (err) { reject(err); }
-    };
-    reader.onerror = reject;
-    reader.readAsText(file);
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => { try { res(JSON.parse(e.target.result)); } catch(err) { rej(err); } };
+    r.onerror = rej;
+    r.readAsText(file);
   });
 }
 
@@ -307,23 +361,20 @@ function setProgress(pct) {
   progressPct.textContent = Math.round(pct) + '%';
 }
 
-// ── Parsers ──────────────────────────────────────────────────────────────────
+// ── Parsers ───────────────────────────────────────────────────────────────────
 function parseTimeline(data) {
   const visits = [];
   for (const obj of (data.timelineObjects || [])) {
     const pv = obj.placeVisit;
     if (!pv) continue;
-    const loc = pv.location || {};
-    const dur = pv.duration || {};
-    const startDt = parseTs(dur.startTimestamp);
-    const endDt   = parseTs(dur.endTimestamp);
+    const loc = pv.location || {}, dur = pv.duration || {};
+    const startDt = parseTs(dur.startTimestamp), endDt = parseTs(dur.endTimestamp);
     if (!startDt) continue;
-    const lat = (loc.latitudeE7  || 0) / 1e7;
-    const lng = (loc.longitudeE7 || 0) / 1e7;
     visits.push(makeVisit({
-      name:    loc.name || 'Luogo sconosciuto',
-      address: loc.address || '',
-      startDt, endDt, lat, lng,
+      name: loc.name || 'Luogo sconosciuto', address: loc.address || '',
+      startDt, endDt,
+      lat: (loc.latitudeE7  || 0) / 1e7,
+      lng: (loc.longitudeE7 || 0) / 1e7,
       confidence: pv.visitConfidence || 0,
     }));
   }
@@ -333,91 +384,70 @@ function parseTimeline(data) {
 async function parseRecords(data, fileIdx, totalFiles) {
   const raw = data.locations || [];
   progressLabel.textContent = `Normalizzazione ${raw.length.toLocaleString('it')} punti GPS…`;
-
-  // Normalise in chunks to keep UI responsive
   const points = [];
   const CHUNK = 50_000;
   for (let i = 0; i < raw.length; i += CHUNK) {
-    const slice = raw.slice(i, i + CHUNK);
-    for (const loc of slice) {
-      const dt = locToDate(loc);
+    for (const loc of raw.slice(i, i + CHUNK)) {
+      const dt  = locToDate(loc);
       if (!dt) continue;
       const lat = (loc.latitudeE7  || 0) / 1e7;
       const lng = (loc.longitudeE7 || 0) / 1e7;
       if (!lat && !lng) continue;
       points.push({ lat, lng, dt });
     }
-    setProgress(30 + ((i / raw.length) * 30));
+    setProgress(30 + (i / raw.length) * 30);
     await tick();
   }
-
   points.sort((a, b) => a.dt - b.dt);
   progressLabel.textContent = `Rilevamento soste su ${points.length.toLocaleString('it')} punti…`;
   await tick();
-
   const stays = await stayDetection(points);
   progressLabel.textContent = `Trovate ${stays.length} soste.`;
-  setProgress(90 + ((fileIdx / totalFiles) * 10));
-
+  setProgress(90 + (fileIdx / totalFiles) * 10);
   return stays.map(s => makeVisit({
-    name:    `Sosta (${s.lat.toFixed(4)}, ${s.lng.toFixed(4)})`,
-    address: `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}`,
-    startDt: s.start,
-    endDt:   s.end,
-    lat:     s.lat,
-    lng:     s.lng,
-    confidence: 0,
+    name: `Sosta (${s.lat.toFixed(4)}, ${s.lng.toFixed(4)})`, address: `${s.lat.toFixed(5)}, ${s.lng.toFixed(5)}`,
+    startDt: s.start, endDt: s.end, lat: s.lat, lng: s.lng, confidence: 0,
   }));
 }
 
 function tick() { return new Promise(r => setTimeout(r, 0)); }
-
 function locToDate(loc) {
   if (loc.timestamp) return parseTs(loc.timestamp);
   if (loc.timestampMs) return new Date(+loc.timestampMs);
   return null;
 }
+function parseTs(ts) { if (!ts) return null; try { return new Date(ts); } catch { return null; } }
 
-function parseTs(ts) {
-  if (!ts) return null;
-  try { return new Date(ts); } catch { return null; }
-}
-
-// ── Stay detection (client-side, O(n)) ───────────────────────────────────────
+// ── Stay detection (O(n)) ─────────────────────────────────────────────────────
 async function stayDetection(points) {
   const stays = [];
   if (!points.length) return stays;
-
   const CHUNK = 100_000;
   let cLat = points[0].lat, cLng = points[0].lng, cCnt = 1, cStart = 0;
-
   for (let i = 1; i < points.length; i++) {
     if (i % CHUNK === 0) { await tick(); setProgress(60 + (i / points.length) * 25); }
-    const d = haversine(cLat, cLng, points[i].lat, points[i].lng);
-    if (d <= RADIUS_M) {
+    if (haversine(cLat, cLng, points[i].lat, points[i].lng) <= RADIUS_M) {
       cLat = (cLat * cCnt + points[i].lat) / (cCnt + 1);
       cLng = (cLng * cCnt + points[i].lng) / (cCnt + 1);
       cCnt++;
     } else {
-      const durMin = (points[i-1].dt - points[cStart].dt) / 60_000;
-      if (durMin >= MIN_MINUTES && cCnt >= 2) {
-        stays.push({ lat: +cLat.toFixed(6), lng: +cLng.toFixed(6), start: points[cStart].dt, end: points[i-1].dt, durMin: Math.round(durMin) });
-      }
+      const dm = (points[i-1].dt - points[cStart].dt) / 60_000;
+      if (dm >= MIN_MINUTES && cCnt >= 2)
+        stays.push({ lat:+cLat.toFixed(6), lng:+cLng.toFixed(6), start:points[cStart].dt, end:points[i-1].dt });
       cLat = points[i].lat; cLng = points[i].lng; cCnt = 1; cStart = i;
     }
   }
   if (cCnt >= 2) {
-    const durMin = (points[points.length-1].dt - points[cStart].dt) / 60_000;
-    if (durMin >= MIN_MINUTES)
-      stays.push({ lat: +cLat.toFixed(6), lng: +cLng.toFixed(6), start: points[cStart].dt, end: points[points.length-1].dt, durMin: Math.round(durMin) });
+    const dm = (points.at(-1).dt - points[cStart].dt) / 60_000;
+    if (dm >= MIN_MINUTES)
+      stays.push({ lat:+cLat.toFixed(6), lng:+cLng.toFixed(6), start:points[cStart].dt, end:points.at(-1).dt });
   }
   return stays;
 }
 
 function haversine(lat1, lng1, lat2, lng2) {
-  const R = 6_371_000;
-  const p = Math.PI / 180;
-  const dp = (lat2 - lat1) * p, dl = (lng2 - lng1) * p;
+  const R = 6_371_000, p = Math.PI / 180;
+  const dp = (lat2-lat1)*p, dl = (lng2-lng1)*p;
   const a = Math.sin(dp/2)**2 + Math.cos(lat1*p)*Math.cos(lat2*p)*Math.sin(dl/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
@@ -429,37 +459,183 @@ function makeVisit({ name, address, startDt, endDt, lat, lng, confidence }) {
   const time = d.toLocaleTimeString('it-IT', { hour:'2-digit', minute:'2-digit' });
   const [dd, mm, yyyy] = date.split('/');
   const dateSort = `${yyyy}${mm}${dd}${time.replace(':','')}`;
-
   let durMin = 0, durStr = '—';
   if (endDt) {
     durMin = Math.round((new Date(endDt) - d) / 60_000);
-    const h = Math.floor(durMin / 60), m = durMin % 60;
+    const h = Math.floor(durMin/60), m = durMin%60;
     durStr = h ? `${h}h ${m}m` : `${m}m`;
   }
-
-  return { name, address, date, time, dateSort, duration: durStr, durationMin: durMin, lat: +lat.toFixed(6), lng: +lng.toFixed(6), confidence };
+  return { name, address, date, time, dateSort, duration:durStr, durationMin:durMin,
+           lat:+lat.toFixed(6), lng:+lng.toFixed(6), confidence,
+           isoDate: `${yyyy}-${mm}-${dd}` };
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function renderStats() {
   document.getElementById('sTotal').textContent = allVisits.length.toLocaleString('it');
   document.getElementById('sDays').textContent  = new Set(allVisits.map(v => v.date)).size.toLocaleString('it');
-  const withDur = allVisits.filter(v => v.durationMin > 0);
-  if (withDur.length) {
-    const mx = withDur.reduce((a,b) => b.durationMin > a.durationMin ? b : a);
+  const wd = allVisits.filter(v => v.durationMin > 0);
+  if (wd.length) {
+    const mx = wd.reduce((a,b) => b.durationMin > a.durationMin ? b : a);
     document.getElementById('sLongest').textContent = mx.duration;
-    const avg = Math.round(withDur.reduce((s,v) => s + v.durationMin, 0) / withDur.length);
+    const avg = Math.round(wd.reduce((s,v) => s+v.durationMin, 0) / wd.length);
     document.getElementById('sAvg').textContent = fmtMin(avg);
   }
 }
-
 function fmtMin(m) { const h=Math.floor(m/60),mm=m%60; return h?`${h}h ${mm}m`:`${mm}m`; }
+
+// ── Month navigator ───────────────────────────────────────────────────────────
+function populateMonthNav() {
+  // Build sorted list of unique YYYY-MM from data
+  const counts = {};
+  for (const v of allVisits) {
+    const key = v.isoDate.slice(0, 7); // YYYY-MM
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  monthList = Object.keys(counts).sort().map(k => {
+    const [y, m] = k.split('-');
+    return { value: k, label: `${MESI_IT[+m-1]} ${y}`, count: counts[k] };
+  });
+
+  monthSelect.innerHTML = '<option value="">— Scegli un mese —</option>' +
+    monthList.map((m, i) => `<option value="${i}">${m.label} (${m.count})</option>`).join('');
+  currentMonthIdx = -1;
+  updateMonthNavBtns();
+}
+
+function updateMonthNavBtns() {
+  document.getElementById('btnMonthPrev').disabled = currentMonthIdx <= 0;
+  document.getElementById('btnMonthNext').disabled = currentMonthIdx >= monthList.length - 1;
+}
+
+monthSelect.addEventListener('change', () => {
+  const idx = monthSelect.value === '' ? -1 : +monthSelect.value;
+  currentMonthIdx = idx;
+  updateMonthNavBtns();
+  if (idx === -1) return;
+  applyMonthFilter(idx);
+});
+
+document.getElementById('btnMonthPrev').addEventListener('click', () => {
+  if (currentMonthIdx > 0) { currentMonthIdx--; monthSelect.value = currentMonthIdx; updateMonthNavBtns(); applyMonthFilter(currentMonthIdx); }
+});
+document.getElementById('btnMonthNext').addEventListener('click', () => {
+  if (currentMonthIdx < monthList.length - 1) { currentMonthIdx++; monthSelect.value = currentMonthIdx; updateMonthNavBtns(); applyMonthFilter(currentMonthIdx); }
+});
+
+function applyMonthFilter(idx) {
+  const m = monthList[idx];
+  const [y, mo] = m.value.split('-');
+  const lastDay = new Date(+y, +mo, 0).getDate();
+  dateFrom.value = `${y}-${mo}-01`;
+  dateTo.value   = `${y}-${mo}-${String(lastDay).padStart(2,'0')}`;
+  clearShortcuts();
+  showRangeBadge(m.label);
+  applyFilters();
+}
+
+// ── Shortcut buttons ──────────────────────────────────────────────────────────
+function toISO(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function isoToday() { return toISO(new Date()); }
+
+const RANGES = {
+  today:    () => { const t=isoToday(); return [t, t]; },
+  yesterday:() => { const d=new Date(); d.setDate(d.getDate()-1); const t=toISO(d); return [t,t]; },
+  week:     () => { const d=new Date(); d.setDate(d.getDate()-6); return [toISO(d), isoToday()]; },
+  month:    () => { const n=new Date(); return [`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-01`, isoToday()]; },
+  '3m':     () => { const d=new Date(); d.setMonth(d.getMonth()-3); return [toISO(d), isoToday()]; },
+  '6m':     () => { const d=new Date(); d.setMonth(d.getMonth()-6); return [toISO(d), isoToday()]; },
+  year:     () => { const y=new Date().getFullYear(); return [`${y}-01-01`,`${y}-12-31`]; },
+  lastyear: () => { const y=new Date().getFullYear()-1; return [`${y}-01-01`,`${y}-12-31`]; },
+  all:      () => ['', ''],
+};
+
+const RANGE_LABELS = {
+  today:'Oggi', yesterday:'Ieri', week:'Questa settimana', month:'Questo mese',
+  '3m':'Ultimi 3 mesi', '6m':'Ultimi 6 mesi', year:"Quest'anno", lastyear:'Anno scorso', all:'Tutto',
+};
+
+document.getElementById('shortcutBtns').addEventListener('click', e => {
+  const btn = e.target.closest('.shortcut-btn');
+  if (!btn) return;
+  const range = btn.dataset.range;
+  const [from, to] = RANGES[range]();
+  dateFrom.value = from;
+  dateTo.value   = to;
+  clearShortcuts();
+  btn.classList.add('active');
+  monthSelect.value = '';
+  currentMonthIdx = -1;
+  updateMonthNavBtns();
+  if (range === 'all') hideRangeBadge(); else showRangeBadge(RANGE_LABELS[range]);
+  applyFilters();
+});
+
+document.getElementById('btnApplyRange').addEventListener('click', () => {
+  clearShortcuts();
+  currentMonthIdx = -1; monthSelect.value = ''; updateMonthNavBtns();
+  const from = dateFrom.value, to = dateTo.value;
+  if (from || to) {
+    const lbl = (from && to) ? `${fmtDateLabel(from)} → ${fmtDateLabel(to)}` : from ? `Da ${fmtDateLabel(from)}` : `Fino al ${fmtDateLabel(to)}`;
+    showRangeBadge(lbl);
+  } else hideRangeBadge();
+  applyFilters();
+});
+
+function fmtDateLabel(iso) {
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function clearShortcuts() {
+  document.querySelectorAll('.shortcut-btn').forEach(b => b.classList.remove('active'));
+}
+function showRangeBadge(label) {
+  activeRangeBadge.innerHTML = `<i class="bi bi-calendar-event"></i> ${label} <span class="ms-1" style="cursor:pointer" id="clearBadge">×</span>`;
+  activeRangeBadge.classList.remove('d-none');
+  document.getElementById('clearBadge').onclick = () => resetFilters();
+}
+function hideRangeBadge() { activeRangeBadge.classList.add('d-none'); }
+
+// ── Apply filters ─────────────────────────────────────────────────────────────
+function applyFilters() {
+  const q    = searchInput.value.trim().toLowerCase();
+  const from = dateFrom.value;
+  const to   = dateTo.value;
+  const minM = +minDur.value;
+
+  filteredVisits = allVisits.filter(v => {
+    if (q && !v.name.toLowerCase().includes(q) && !v.address.toLowerCase().includes(q)) return false;
+    if (minM && v.durationMin < minM) return false;
+    if (from && v.isoDate < from) return false;
+    if (to   && v.isoDate > to)   return false;
+    return true;
+  });
+  currentPage = 1;
+  renderTable();
+  if (map) { clearMapMarkers(); loadMapMarkers(); }
+}
+
+function resetFilters() {
+  searchInput.value = ''; dateFrom.value = ''; dateTo.value = ''; minDur.value = '30';
+  currentMonthIdx = -1; monthSelect.value = ''; updateMonthNavBtns();
+  clearShortcuts();
+  document.querySelector('.shortcut-btn[data-range="all"]').classList.add('active');
+  hideRangeBadge();
+  filteredVisits = [...allVisits]; currentPage = 1; renderTable();
+  if (map) { clearMapMarkers(); loadMapMarkers(); }
+}
+
+searchInput.addEventListener('input', applyFilters);
+minDur.addEventListener('change', applyFilters);
+document.getElementById('btnReset').addEventListener('click', resetFilters);
 
 // ── Table ─────────────────────────────────────────────────────────────────────
 function renderTable() {
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const page  = filteredVisits.slice(start, start + PAGE_SIZE);
-  tableBody.innerHTML = page.map((v, i) => {
+  const start = (currentPage-1) * PAGE_SIZE;
+  const page  = filteredVisits.slice(start, start+PAGE_SIZE);
+  tableBody.innerHTML = page.map((v,i) => {
     const idx = allVisits.indexOf(v);
     return `<tr onclick="showDetail(${idx})">
       <td class="text-muted">${start+i+1}</td>
@@ -468,12 +644,9 @@ function renderTable() {
       <td>${v.time}</td>
       <td>${v.durationMin ? `<span class="dur-badge">${v.duration}</span>` : '—'}</td>
       <td class="addr-cell text-muted" title="${esc(v.address)}" id="addr-${idx}">${esc(v.address)}</td>
-      <td>
-        <a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank"
-           class="btn btn-outline-primary btn-sm map-btn" onclick="event.stopPropagation()">
-          <i class="bi bi-pin-map"></i>
-        </a>
-      </td>
+      <td><a href="https://maps.google.com/?q=${v.lat},${v.lng}" target="_blank"
+             class="btn btn-outline-primary btn-sm map-btn" onclick="event.stopPropagation()">
+        <i class="bi bi-pin-map"></i></a></td>
     </tr>`;
   }).join('');
   renderPagination();
@@ -484,52 +657,19 @@ function renderPagination() {
   const total = Math.ceil(filteredVisits.length / PAGE_SIZE);
   pageBtns.innerHTML = '';
   if (total <= 1) return;
-
-  const addBtn = (label, page, disabled, active) => {
+  const add = (lbl, page, disabled, active) => {
     const b = document.createElement('button');
-    b.className = `btn btn-sm page-btn ${active ? 'btn-primary' : 'btn-outline-secondary'}`;
-    b.innerHTML = label; b.disabled = disabled;
+    b.className = `btn btn-sm page-btn ${active?'btn-primary':'btn-outline-secondary'}`;
+    b.innerHTML = lbl; b.disabled = disabled;
     b.onclick = () => { currentPage = page; renderTable(); window.scrollTo(0,0); };
     pageBtns.appendChild(b);
   };
-  addBtn('<i class="bi bi-chevron-double-left"></i>', 1, currentPage===1, false);
-  addBtn('<i class="bi bi-chevron-left"></i>', currentPage-1, currentPage===1, false);
-  for (let p = Math.max(1,currentPage-2); p <= Math.min(total,currentPage+2); p++)
-    addBtn(p, p, false, p===currentPage);
-  addBtn('<i class="bi bi-chevron-right"></i>', currentPage+1, currentPage===total, false);
-  addBtn('<i class="bi bi-chevron-double-right"></i>', total, currentPage===total, false);
+  add('<i class="bi bi-chevron-double-left"></i>', 1, currentPage===1, false);
+  add('<i class="bi bi-chevron-left"></i>', currentPage-1, currentPage===1, false);
+  for (let p=Math.max(1,currentPage-2); p<=Math.min(total,currentPage+2); p++) add(p,p,false,p===currentPage);
+  add('<i class="bi bi-chevron-right"></i>', currentPage+1, currentPage===total, false);
+  add('<i class="bi bi-chevron-double-right"></i>', total, currentPage===total, false);
 }
-
-// ── Filters ──────────────────────────────────────────────────────────────────
-function applyFilters() {
-  const q    = searchInput.value.trim().toLowerCase();
-  const from = dateFrom.value;
-  const to   = dateTo.value;
-  const minM = +minDur.value;
-
-  filteredVisits = allVisits.filter(v => {
-    if (q && !v.name.toLowerCase().includes(q) && !v.address.toLowerCase().includes(q)) return false;
-    if (minM && v.durationMin < minM) return false;
-    if (from || to) {
-      const [d,m,y] = v.date.split('/');
-      const iso = `${y}-${m}-${d}`;
-      if (from && iso < from) return false;
-      if (to   && iso > to)   return false;
-    }
-    return true;
-  });
-  currentPage = 1;
-  renderTable();
-  if (map) { clearMapMarkers(); loadMapMarkers(); }
-}
-
-[searchInput, dateFrom, dateTo, minDur].forEach(el => el.addEventListener('change', applyFilters));
-searchInput.addEventListener('input', applyFilters);
-document.getElementById('btnReset').addEventListener('click', () => {
-  searchInput.value = ''; dateFrom.value = ''; dateTo.value = ''; minDur.value = '30';
-  filteredVisits = [...allVisits]; currentPage = 1; renderTable();
-  if (map) { clearMapMarkers(); loadMapMarkers(); }
-});
 
 // ── Detail modal ──────────────────────────────────────────────────────────────
 window.showDetail = function(idx) {
@@ -541,23 +681,21 @@ window.showDetail = function(idx) {
     <div class="detail-row"><span class="lbl"><i class="bi bi-clock me-1"></i>Orario</span><span class="val">${v.time}</span></div>
     <div class="detail-row"><span class="lbl"><i class="bi bi-hourglass me-1"></i>Permanenza</span><span class="val">${v.duration}</span></div>
     <div class="detail-row"><span class="lbl"><i class="bi bi-crosshair me-1"></i>Coordinate</span><span class="val">${v.lat}, ${v.lng}</span></div>
-    <div class="detail-row"><span class="lbl"><i class="bi bi-geo me-1"></i>Indirizzo</span><span class="val" id="modalAddr">${v.address || '—'}</span></div>
-    ${v.confidence ? `<div class="detail-row"><span class="lbl"><i class="bi bi-patch-check me-1"></i>Confidenza</span><span class="val">${Math.round(v.confidence)}%</span></div>` : ''}
+    <div class="detail-row"><span class="lbl"><i class="bi bi-geo me-1"></i>Indirizzo</span><span class="val" id="modalAddr">${v.address||'—'}</span></div>
+    ${v.confidence?`<div class="detail-row"><span class="lbl"><i class="bi bi-patch-check me-1"></i>Confidenza</span><span class="val">${Math.round(v.confidence)}%</span></div>`:''}
   `;
   document.getElementById('modalMapLink').href = `https://maps.google.com/?q=${v.lat},${v.lng}`;
   bsModal.show();
 };
 
-// Reverse geocoding via Nominatim (free, 1 req/s limit)
 document.getElementById('btnGeocode').addEventListener('click', async () => {
   if (!currentDetail) return;
   const { idx, v } = currentDetail;
   const btn = document.getElementById('btnGeocode');
   btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cercando…';
   try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${v.lat}&lon=${v.lng}&format=json`, {
-      headers: { 'Accept-Language': 'it' }
-    });
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${v.lat}&lon=${v.lng}&format=json`,
+      { headers:{'Accept-Language':'it'} });
     const d = await r.json();
     const addr = d.display_name || '—';
     allVisits[idx].address = addr;
@@ -577,7 +715,6 @@ document.getElementById('btnTable').addEventListener('click', () => {
   document.getElementById('btnTable').className = 'btn btn-light btn-sm';
   document.getElementById('btnMap').className   = 'btn btn-outline-light btn-sm';
 });
-
 document.getElementById('btnMap').addEventListener('click', () => {
   mapSection.classList.remove('d-none'); tableSection.classList.add('d-none');
   document.getElementById('btnMap').className   = 'btn btn-light btn-sm';
@@ -587,24 +724,20 @@ document.getElementById('btnMap').addEventListener('click', () => {
 
 function initMap() {
   if (!map) {
-    map = L.map('map').setView([41.9, 12.5], 6);
+    map = L.map('map').setView([41.9,12.5],6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'© OpenStreetMap' }).addTo(map);
   }
   clearMapMarkers(); loadMapMarkers();
 }
-
 function clearMapMarkers() { mapMarkers.forEach(m => m.remove()); mapMarkers = []; }
-
 function loadMapMarkers() {
-  const pts = filteredVisits.filter(v => v.lat || v.lng);
   const bounds = [];
-  pts.forEach((v, i) => {
-    const m = L.circleMarker([v.lat, v.lng], { radius:7, fillColor:'#1a73e8', color:'#fff', weight:2, fillOpacity:.85 }).addTo(map);
+  filteredVisits.filter(v => v.lat || v.lng).forEach(v => {
+    const m = L.circleMarker([v.lat,v.lng],{radius:7,fillColor:'#1a73e8',color:'#fff',weight:2,fillOpacity:.85}).addTo(map);
     m.bindPopup(`<strong>${esc(v.name)}</strong><br/><small>${v.date} ${v.time} — ${v.duration}</small>`);
-    mapMarkers.push(m);
-    bounds.push([v.lat, v.lng]);
+    mapMarkers.push(m); bounds.push([v.lat,v.lng]);
   });
-  if (bounds.length) map.fitBounds(bounds, { padding:[40,40] });
+  if (bounds.length) map.fitBounds(bounds,{padding:[40,40]});
 }
 
 // ── Util ──────────────────────────────────────────────────────────────────────
