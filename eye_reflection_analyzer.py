@@ -190,11 +190,35 @@ def save_debug_crops(eye_data: list[dict], output_dir: str):
         print(f"[+] Saved enhanced eye #{i} -> {path}")
 
 
+def prompt_image_path() -> str:
+    """Ask the user for the portrait image path, validating it exists."""
+    while True:
+        path = input("\nPercorso della foto da analizzare: ").strip()
+        if not path:
+            print("[!] Il percorso non può essere vuoto.")
+            continue
+        # Remove accidental quotes pasted from file managers
+        path = path.strip("'\"")
+        if not os.path.isfile(path):
+            print(f"[!] File non trovato: {path}")
+            continue
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}:
+            print(f"[!] Formato non supportato ({ext}). Usa JPG, PNG, BMP, TIFF o WebP.")
+            continue
+        return path
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Analyze reflections in a person's eyes from a portrait photo."
     )
-    parser.add_argument("image", help="Path to the portrait image (JPG/PNG)")
+    parser.add_argument(
+        "image",
+        nargs="?",
+        default=None,
+        help="Path to the portrait image (JPG/PNG). If omitted, you will be prompted.",
+    )
     parser.add_argument(
         "--save-crops",
         metavar="DIR",
@@ -210,8 +234,15 @@ def main():
 
     check_dependencies()
 
-    print(f"[*] Loading image: {args.image}")
-    img = load_image(args.image)
+    print("=" * 60)
+    print("  EYE REFLECTION ANALYZER")
+    print("=" * 60)
+
+    # Ask for path interactively if not supplied as argument
+    image_path = args.image if args.image else prompt_image_path()
+
+    print(f"\n[*] Loading image: {image_path}")
+    img = load_image(image_path)
     print(f"[*] Image size: {img.shape[1]}x{img.shape[0]} px")
 
     print("[*] Detecting eyes...")
