@@ -273,9 +273,6 @@ def parse_point(loc: dict) -> dict | None:
     Converte un record raw in un punto pulito.
     Restituisce None se il punto non è affidabile o cade in un giorno non lavorativo.
     """
-    if not is_reliable(loc):
-        return None
-
     try:
         ts_utc = datetime.datetime.fromisoformat(
             loc["timestamp"].replace("Z", "+00:00")
@@ -664,21 +661,16 @@ def main() -> None:
     raw_locs = raw_data.get("locations", [])
     log.info("Punti grezzi: %d", len(raw_locs))
 
-    log.info("Filtraggio punti (sorgente inaffidabile, weekend, festività, intervallo date) ...")
+    log.info("Filtraggio punti (weekend, festività, intervallo date) ...")
     points: list[dict] = []
-    skipped_unreliable = 0
     skipped_nonworking = 0
     skipped_daterange  = 0
 
     for loc in raw_locs:
-        if not is_reliable(loc):
-            skipped_unreliable += 1
-            continue
         p = parse_point(loc)
         if p is None:
             skipped_nonworking += 1
             continue
-        # Filtro intervallo date
         d = p["timestamp"].date()
         if date_from and d < date_from:
             skipped_daterange += 1
@@ -689,12 +681,12 @@ def main() -> None:
         points.append(p)
 
     log.info(
-        "Rimasti: %d punti  (inaffidabili: %d  |  weekend/festivi: %d  |  fuori intervallo: %d)",
-        len(points), skipped_unreliable, skipped_nonworking, skipped_daterange,
+        "Rimasti: %d punti  (weekend/festivi: %d  |  fuori intervallo: %d)",
+        len(points), skipped_nonworking, skipped_daterange,
     )
 
     if not points:
-        log.error("Nessun punto affidabile nei giorni lavorativi. Controllare il file.")
+        log.error("Nessun punto trovato nei giorni lavorativi. Controllare il file.")
         sys.exit(1)
 
     points.sort(key=lambda p: p["timestamp"])
