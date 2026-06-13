@@ -541,6 +541,22 @@ def _write_week_sheet(
             if fill:
                 cell.fill = fill
 
+# ── Lettura interattiva date ───────────────────────────────────────────────────
+
+def _ask_date(prompt: str, default: datetime.date | None = None) -> datetime.date | None:
+    """Chiede una data in formato GG/MM/AAAA; invio senza valore usa il default."""
+    while True:
+        suffix = f" [{default.strftime('%d/%m/%Y')}]" if default else " [lascia vuoto per nessun limite]"
+        raw = input(f"{prompt}{suffix}: ").strip()
+        if not raw:
+            return default
+        for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+            try:
+                return datetime.datetime.strptime(raw, fmt).date()
+            except ValueError:
+                continue
+        print("  ✗ Formato non riconosciuto. Usa GG/MM/AAAA (es. 01/03/2019)")
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -564,6 +580,16 @@ def main() -> None:
         help="Salta la ricerca di luoghi alternativi (più veloce)",
     )
     parser.add_argument(
+        "--date-from",
+        default=None,
+        help="Data inizio estrazione GG/MM/AAAA (es. 01/01/2020)",
+    )
+    parser.add_argument(
+        "--date-to",
+        default=None,
+        help="Data fine estrazione GG/MM/AAAA (es. 31/12/2022)",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING"],
@@ -584,6 +610,47 @@ def main() -> None:
         log.error("File non trovato: %s", input_path)
         sys.exit(1)
 
+    # ── Selezione intervallo date ─────────────────────────────────────────────
+    print()
+    print("═" * 52)
+    print("  ANALISI CRONOLOGIA POSIZIONI GOOGLE MAPS")
+    print("═" * 52)
+
+    if args.date_from:
+        for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+            try:
+                date_from: datetime.date | None = datetime.datetime.strptime(args.date_from, fmt).date()
+                break
+            except ValueError:
+                continue
+        else:
+            log.error("--date-from non valido: %s", args.date_from)
+            sys.exit(1)
+    else:
+        print("\n  Specifica l'intervallo di date da estrarre.")
+        print("  Premi INVIO per non impostare un limite.\n")
+        date_from = _ask_date("  Data INIZIO (GG/MM/AAAA)")
+
+    if args.date_to:
+        for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+            try:
+                date_to: datetime.date | None = datetime.datetime.strptime(args.date_to, fmt).date()
+                break
+            except ValueError:
+                continue
+        else:
+            log.error("--date-to non valido: %s", args.date_to)
+            sys.exit(1)
+    else:
+        date_to = _ask_date("  Data FINE   (GG/MM/AAAA)")
+
+    # Riepilogo intervallo
+    from_str = date_from.strftime("%d/%m/%Y") if date_from else "inizio file"
+    to_str   = date_to.strftime("%d/%m/%Y")   if date_to   else "fine file"
+    print(f"\n  Estrazione: {from_str}  →  {to_str}")
+    print("═" * 52)
+    print()
+
     # Carica cache geocoding da disco
     _load_cache(GEOCODE_CACHE_FILE, _geocode_cache)
     _load_cache(OVERPASS_CACHE_FILE, _overpass_cache)
@@ -597,10 +664,11 @@ def main() -> None:
     raw_locs = raw_data.get("locations", [])
     log.info("Punti grezzi: %d", len(raw_locs))
 
-    log.info("Filtraggio punti (sorgente inaffidabile, weekend, festività) ...")
+    log.info("Filtraggio punti (sorgente inaffidabile, weekend, festività, intervallo date) ...")
     points: list[dict] = []
     skipped_unreliable = 0
     skipped_nonworking = 0
+    skipped_daterange  = 0
 
     for loc in raw_locs:
         if not is_reliable(loc):
@@ -610,11 +678,19 @@ def main() -> None:
         if p is None:
             skipped_nonworking += 1
             continue
+        # Filtro intervallo date
+        d = p["timestamp"].date()
+        if date_from and d < date_from:
+            skipped_daterange += 1
+            continue
+        if date_to and d > date_to:
+            skipped_daterange += 1
+            continue
         points.append(p)
 
     log.info(
-        "Rimasti: %d punti  (scartati per inaffidabilità: %d  |  weekend/festivi: %d)",
-        len(points), skipped_unreliable, skipped_nonworking,
+        "Rimasti: %d punti  (inaffidabili: %d  |  weekend/festivi: %d  |  fuori intervallo: %d)",
+        len(points), skipped_unreliable, skipped_nonworking, skipped_daterange,
     )
 
     if not points:
