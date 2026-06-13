@@ -163,8 +163,10 @@ def reverse_geocode(lat: float, lon: float) -> dict:
         )
         if r.status_code == 200:
             data = r.json()
+            if not isinstance(data, dict):
+                raise ValueError(f"Risposta non valida: {data!r}")
             name = (data.get("name")
-                    or data.get("namedetails", {}).get("name", "")
+                    or (data.get("namedetails") or {}).get("name", "")
                     or "")
             addr = data.get("display_name", "")
             # Pulisce l'indirizzo: prende i primi 4 segmenti (no nazione)
